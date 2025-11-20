@@ -1,0 +1,76 @@
+import os
+import pandas as pd
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Paths to folders
+results_folder = #add your path ...  /results/'
+
+# Load the .csv file containing the summary of the results
+filename = results_folder + 'eda_results_processed.csv'
+results = pd.read_csv(filename)
+
+#Creating the Mean Amplitude of SCR Peaks for First/Second
+# Filter conditions to extract 'first' or 'second' as substrings
+results['Condition_extracted'] = results['Condition'].str.extract('_(first|second)(?:_converted)?', expand=False)
+
+# Drop rows with NaN in 'Condition_extracted' after filtering
+results = results.dropna(subset=['Condition_extracted'])
+
+# Rename extracted conditions for clarity in plotting
+results['Condition'] = results['Condition_extracted']
+del results['Condition_extracted']
+
+# Create a mapping of markers for participants
+markers = {'sub01': 'o',  # Circle for Participant 1
+           'sub02': 's',  # Square for Participant 2
+           'sub03': '^'}  # Triangle for Participant 3
+
+# Create a mapping of colors for participants
+colors = {'sub01': '#a0356c',    # Custom color for Participant 1
+          'sub02': '#731a46',  # Custom color for Participant 2
+          'sub03': '#628810'}   # Custom color for Participant 3
+
+# Group by Participant and Condition to calculate mean ECG rate
+grouped = results.groupby(['Participant', 'Condition'])['SCR_Peaks_Amplitude_Mean'].mean().unstack()
+
+# Calculate overall mean for bar plot
+average_ecg = results.groupby('Condition')['SCR_Peaks_Amplitude_Mean'].mean()
+
+# Plotting
+fig, ax = plt.subplots()
+
+# Define bar colors for each condition
+bar_colors = {'first': '#145DA0', 'second': '#3c6007'}
+
+# Bar plot for average ECG Rate
+bars = average_ecg.plot(kind='bar', color=[bar_colors[cond] for cond in average_ecg.index], ax=ax, zorder=0, width=0.3)
+
+# Individual points and lines
+for participant, row in grouped.iterrows():
+    sorted_conditions = row.sort_index(key=lambda x: x.map({'first': 1, 'second': 2}))  # Ensuring first comes first
+    ax.plot(sorted_conditions.index, sorted_conditions.values,
+            marker=markers[participant],
+            linestyle='-',  # Solid line for better visibility
+            label=f'Participant {participant[-2:]} ({sorted_conditions.values[0]:.2f}, {sorted_conditions.values[1]:.2f})',
+            markersize=8,
+            color=colors[participant])  # Set the color for each participant
+
+# Adjust x-ticks to show conditions and avoid overlap
+ax.set_xticks(range(len(average_ecg)))
+ax.set_xticklabels(average_ecg.index)
+ax.set_xlabel('Condition')
+ax.set_ylabel('Mean Amplitude of SCR Peaks')
+ax.set_title('Mean Amplitude of SCR Peaks by Condition and Participant with Averages')
+
+# Adding averages to the legend by creating custom legend entries
+from matplotlib.patches import Patch
+legend_elements = [Patch(facecolor=bar_colors['first'], label=f'First Avg: {average_ecg["first"]:.2f}'),
+                   Patch(facecolor=bar_colors['second'], label=f'Second Avg: {average_ecg["second"]:.2f}')] \
+                   + [line for line in ax.get_lines() if line.get_label().startswith("Participant")]
+
+# Place the legend outside the plot area on the right
+ax.legend(handles=legend_elements, title='Data', loc='upper left', bbox_to_anchor=(1, 1))
+
+plt.show()
